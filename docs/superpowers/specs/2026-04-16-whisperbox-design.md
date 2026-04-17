@@ -36,10 +36,14 @@ Two processes connected by a Unix domain socket:
 
 Socket path: `~/.local/share/whisperbox/whisperbox.sock`
 
+**Framing:** Newline-delimited JSON (one JSON object per line, terminated by `\n`). Newlines within text fields must be escaped as `\n` in the JSON encoding. On startup, remove stale `.sock` file if it exists before binding.
+
 **Swift → Python:**
 - `{"cmd": "start_recording"}`
 - `{"cmd": "stop_recording"}`
+- `{"cmd": "cancel_recording"}` — discard without transcribing (Escape key)
 - `{"cmd": "reload_config"}`
+- `{"cmd": "switch_model", "model": "medium"}`
 
 **Python → Swift:**
 - `{"event": "recording_started"}`
@@ -47,6 +51,7 @@ Socket path: `~/.local/share/whisperbox/whisperbox.sock`
 - `{"event": "transcription_complete", "text": "...", "preview": true/false}`
 - `{"event": "transcription_error", "error": "..."}`
 - `{"event": "model_loaded"}`
+- `{"event": "model_loading", "model": "..."}` — sent during model switch
 
 ## Swift Menu Bar Shell
 
@@ -63,9 +68,15 @@ Socket path: `~/.local/share/whisperbox/whisperbox.sock`
 
 ### Global Hotkey
 - Default: `Ctrl+Shift+Space`
-- Registered via `NSEvent.addGlobalMonitorForEvents`
+- Registered via `HotKey` Swift package (wraps `CGEvent` taps) — NOT `NSEvent.addGlobalMonitorForEvents` which only observes but doesn't consume events
 - Toggle behavior: press to start, press again to stop
+- Escape while recording = cancel and discard (no transcription)
 - Configurable in config.toml
+
+### Permissions
+- App requires **Accessibility** permission (for CGEvent hotkey taps and text injection)
+- On first launch, check `AXIsProcessTrusted()` and prompt user to grant permission in System Settings if not trusted
+- Show a clear onboarding dialog explaining why the permission is needed
 
 ### Recording Toast Overlay
 - Floating pill/capsule shape, always-on-top, semi-transparent dark background
@@ -78,6 +89,7 @@ Socket path: `~/.local/share/whisperbox/whisperbox.sock`
 ### Process Management
 - On app launch: spawns Python service (`~/whisperbox/.venv/bin/python service.py`)
 - On app quit: sends SIGTERM to Python service
+- Monitor child process: if Python service crashes, restart it automatically (max 3 retries, then show error in menu bar)
 - Optional: add to Login Items for auto-start
 
 ## Python Transcription Service
@@ -95,21 +107,28 @@ Socket path: `~/.local/share/whisperbox/whisperbox.sock`
 - First launch auto-downloads selected model
 
 ### Post-Processing Pipeline
-1. Trim leading/trailing silence
-2. Capitalize first letter
-3. Add period if missing
-4. Strip filler words ("um", "uh") — configurable
+1. Capitalize first letter
+2. Add period if missing
+3. Strip filler words ("um", "uh") — configurable
+
+Note: No audio-level silence trimming — Whisper handles silence robustly. This is text-level cleanup only.
 
 ### Text Injection
-- Tool: `cliclick` (brew installable)
+- **Primary method:** `NSPasteboard` + synthetic `Cmd+V` paste — fast, handles Unicode and long text correctly
+- **Fallback:** `cliclick` for character-by-character typing if paste is unavailable
+- Saves and restores the user's clipboard before/after injection so we don't clobber their clipboard
 - Types text at current cursor/insertion point in focused app
 - If text is selected/highlighted, replaces the selection (standard OS behavior)
 
+### Safety Limits
+- Maximum recording duration: 5 minutes (configurable), auto-stops with transcription
+- Auto-stop on 10 seconds of continuous silence (configurable)
+
 ### Preview Mode
 - When `mode = "preview"` in config:
-  - Small `tkinter` window, always-on-top, borderless
-  - Shows transcribed text
-  - Enter = confirm and type into focused app
+  - Preview window is owned by the **Swift shell** (not Python) — renders as a native macOS panel, always-on-top, borderless
+  - Python sends transcription text via socket, Swift displays it
+  - Enter = confirm and inject text into focused app
   - Escape = discard
 
 ## Configuration
@@ -127,6 +146,8 @@ language = "en"
 [behavior]
 mode = "instant"       # "instant" or "preview"
 sound_feedback = true  # beep on start/stop
+max_duration = 300     # seconds, auto-stop recording
+silence_timeout = 10   # seconds of silence to auto-stop
 
 [postprocessing]
 strip_fillers = true   # remove "um", "uh", etc.
@@ -148,6 +169,8 @@ opacity = 0.85
 │   ├── HotkeyManager.swift       # Global hotkey registration
 │   ├── SocketClient.swift         # IPC with Python service
 │   ├── ToastOverlay.swift         # Recording indicator overlay
+│   ├── PreviewPanel.swift         # Preview mode confirmation window
+│   ├── PermissionsCheck.swift     # Accessibility permission onboarding
 │   └── Info.plist                 # App metadata
 ├── service/
 │   ├── service.py                 # Main service entry point
@@ -171,8 +194,7 @@ opacity = 0.85
 ## Dependencies
 
 ### Homebrew
-- `ffmpeg` — audio format handling
-- `cliclick` — text injection
+- `cliclick` — text injection fallback
 - `python@3.12` — dedicated Python for venv
 
 ### Python (in venv)
