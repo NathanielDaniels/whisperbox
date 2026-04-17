@@ -181,6 +181,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case "model_loaded":
             toast.showTranscribed(text: "Model ready")
 
+        case "config":
+            let combo = event["hotkey_combo"] as? String ?? "ctrl+shift+space"
+            if !hotkeyManager.registerFromString(combo) {
+                log("Failed to parse hotkey combo '\(combo)', using default")
+            }
+
         default:
             break
         }
