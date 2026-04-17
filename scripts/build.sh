@@ -47,6 +47,9 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
+# Ad-hoc code sign so macOS persists permissions across rebuilds
+codesign --force --sign - "$APP_BUNDLE"
+
 echo "=== Build complete ==="
 echo "App bundle: $APP_BUNDLE"
 echo ""

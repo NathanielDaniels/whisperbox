@@ -22,6 +22,7 @@ class AudioRecorder:
         self._silence_frames = 0
         self._frames_per_second = self.SAMPLE_RATE
         self.on_silence_timeout: callable = lambda: None
+        self.on_audio_level: callable = lambda level: None
 
     @property
     def is_recording(self) -> bool:
@@ -64,6 +65,11 @@ class AudioRecorder:
         """sounddevice callback — runs on audio thread."""
         mono = indata[:, 0] if indata.ndim > 1 else indata.flatten()
         self._buffer.append(mono.copy())
+
+        # Compute RMS level (0.0 to 1.0, clamped)
+        rms = float(np.sqrt(np.mean(mono ** 2)))
+        level = min(rms * 15.0, 1.0)  # Scale up for visibility
+        self.on_audio_level(level)
 
         # Silence detection
         if self._is_silence(mono):

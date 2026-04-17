@@ -67,6 +67,10 @@ class ToastOverlay {
         }
     }
 
+    func updateAudioLevel(_ level: Double) {
+        toastState.audioLevel = level
+    }
+
     func showError(_ message: String) {
         toastState.isRecording = false
         toastState.statusText = message
@@ -94,6 +98,7 @@ class ToastOverlay {
 class ToastState: ObservableObject {
     @Published var isRecording = false
     @Published var statusText = "Listening..."
+    @Published var audioLevel: Double = 0.0
 }
 
 struct ToastView: View {
@@ -102,7 +107,7 @@ struct ToastView: View {
     var body: some View {
         HStack(spacing: 10) {
             if state.isRecording {
-                SoundWaveBars()
+                SoundWaveBars(level: state.audioLevel)
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundColor(.green)
@@ -123,26 +128,26 @@ struct ToastView: View {
 }
 
 struct SoundWaveBars: View {
-    @State private var animating = false
+    var level: Double
     let barCount = 5
     let barWidth: CGFloat = 3
     let maxHeight: CGFloat = 20
     let minHeight: CGFloat = 4
 
+    // Each bar gets a slightly different scale for visual variety
+    private let barScales: [Double] = [0.6, 0.85, 1.0, 0.75, 0.5]
+
     var body: some View {
         HStack(spacing: 2) {
             ForEach(0..<barCount, id: \.self) { i in
+                let barLevel = level * barScales[i]
+                let height = minHeight + (maxHeight - minHeight) * barLevel
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(Color.red)
-                    .frame(width: barWidth, height: animating ? maxHeight : minHeight)
-                    .animation(
-                        .easeInOut(duration: 0.4 + Double(i) * 0.1)
-                        .repeatForever(autoreverses: true),
-                        value: animating
-                    )
+                    .frame(width: barWidth, height: height)
+                    .animation(.easeOut(duration: 0.08), value: level)
             }
         }
         .frame(height: maxHeight)
-        .onAppear { animating = true }
     }
 }

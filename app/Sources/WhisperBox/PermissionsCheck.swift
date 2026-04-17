@@ -11,31 +11,11 @@ struct PermissionsCheck {
         AXIsProcessTrusted()
     }
 
-    /// Prompt the user to grant Accessibility permission.
-    /// Shows an alert explaining why, then opens System Settings.
+    /// Check accessibility status without prompting.
+    /// Log a message if not granted so the user knows.
     static func promptIfNeeded() {
-        guard !isAccessibilityGranted else { return }
-
-        let alert = NSAlert()
-        alert.messageText = "WhisperBox Needs Accessibility Access"
-        alert.informativeText = """
-            WhisperBox uses a global keyboard shortcut to start/stop recording, \
-            and pastes transcribed text into your apps. Both require Accessibility \
-            permission.
-
-            Click "Open Settings" to grant access, then restart WhisperBox.
-            """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Quit")
-
-        let response = alert.runModal()
-        if response == .alertFirstButtonReturn {
-            // Open Accessibility pane in System Settings
-            let opts = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as String: true] as CFDictionary
-            AXIsProcessTrustedWithOptions(opts)
-        } else {
-            NSApp.terminate(nil)
+        if !isAccessibilityGranted {
+            print("[WhisperBox] Accessibility not granted — hotkeys may not work. Grant access in System Settings > Privacy & Security > Accessibility.")
         }
     }
 }

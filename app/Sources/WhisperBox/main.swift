@@ -128,6 +128,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hotkeyManager.setEscapeEnabled(true)
             toast.show()
 
+        case "audio_level":
+            let level = event["level"] as? Double ?? 0.0
+            toast.updateAudioLevel(level)
+
         case "recording_stopped":
             isRecording = false
             updateMenuBarIcon(recording: false)

@@ -5,6 +5,7 @@ injection. Communicates with the Swift menu bar app via Unix socket.
 """
 
 import asyncio
+import functools
 import os
 import signal
 import sys
@@ -34,6 +35,7 @@ class WhisperBoxService:
             silence_timeout=bc.get("silence_timeout", 10),
         )
         self._recorder.on_silence_timeout = self._on_silence_timeout
+        self._recorder.on_audio_level = self._on_audio_level
 
         self._transcriber = Transcriber(model_name=tc.get("model", "small"))
         self._injector = TextInjector()
@@ -93,8 +95,16 @@ class WhisperBoxService:
 
         try:
             pp = self._config["postprocessing"]
-            raw_text = self._transcriber.transcribe(
-                audio, language=self._config["transcription"].get("language", "en")
+            loop = asyncio.get_running_loop()
+
+            # Run blocking transcription in thread pool
+            raw_text = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    self._transcriber.transcribe,
+                    audio,
+                    language=self._config["transcription"].get("language", "en"),
+                ),
             )
             text = postprocess(
                 raw_text,
@@ -105,7 +115,8 @@ class WhisperBoxService:
 
             mode = self._config["behavior"].get("mode", "instant")
             if mode == "instant" and text:
-                self._injector.inject(text)
+                # Run blocking injection in thread pool
+                await loop.run_in_executor(None, self._injector.inject, text)
 
             await self._send_event(
                 {
@@ -134,6 +145,14 @@ class WhisperBoxService:
             await self._send_event({"event": "model_loaded"})
         except Exception as e:
             await self._send_event({"event": "transcription_error", "error": str(e)})
+
+    def _on_audio_level(self, level: float):
+        """Called from audio thread with RMS level 0.0-1.0."""
+        if self._loop and self._state == "recording":
+            asyncio.run_coroutine_threadsafe(
+                self._server.send_event({"event": "audio_level", "level": round(level, 3)}),
+                self._loop,
+            )
 
     def _on_silence_timeout(self):
         """Called when silence exceeds the timeout during recording."""
