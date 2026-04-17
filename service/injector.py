@@ -9,8 +9,10 @@ import time
 
 
 class TextInjector:
-    # Small delay to let paste complete before restoring clipboard
-    PASTE_DELAY = 0.15
+    # Delay after setting clipboard before sending Cmd+V
+    CLIPBOARD_SETTLE_DELAY = 0.05
+    # Delay after paste before restoring clipboard
+    PASTE_DELAY = 0.25
 
     def inject(self, text: str):
         """Inject text at the current cursor position in the focused app."""
@@ -23,6 +25,9 @@ class TextInjector:
         try:
             # Copy transcribed text to clipboard
             self._set_clipboard(text)
+
+            # Let the pasteboard change propagate
+            time.sleep(self.CLIPBOARD_SETTLE_DELAY)
 
             # Paste via Cmd+V using AppleScript
             subprocess.run(

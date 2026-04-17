@@ -11,11 +11,13 @@ struct PermissionsCheck {
         AXIsProcessTrusted()
     }
 
-    /// Check accessibility status without prompting.
-    /// Log a message if not granted so the user knows.
+    /// Prompt the user to grant Accessibility if not already granted.
+    /// This triggers the macOS system dialog on first run.
     static func promptIfNeeded() {
-        if !isAccessibilityGranted {
-            print("[WhisperBox] Accessibility not granted — hotkeys may not work. Grant access in System Settings > Privacy & Security > Accessibility.")
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary
+        let trusted = AXIsProcessTrustedWithOptions(options)
+        if !trusted {
+            print("[WhisperBox] Accessibility not granted — text injection requires access. Grant in System Settings > Privacy & Security > Accessibility.")
         }
     }
 }
