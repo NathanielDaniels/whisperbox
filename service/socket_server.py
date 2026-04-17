@@ -13,7 +13,7 @@ from typing import Callable
 class SocketServer:
     def __init__(self, sock_path: str):
         self.sock_path = sock_path
-        self.on_command: Callable[[dict], None] = lambda cmd: None
+        self.on_command: Callable[[dict], None] | None = None
         self._server: asyncio.AbstractServer | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._running = False
@@ -62,7 +62,10 @@ class SocketServer:
                     break
                 try:
                     msg = json.loads(line.decode("utf-8").strip())
-                    self.on_command(msg)
+                    if self.on_command:
+                        result = self.on_command(msg)
+                        if asyncio.iscoroutine(result):
+                            await result
                 except json.JSONDecodeError:
                     continue
         except (ConnectionResetError, BrokenPipeError):

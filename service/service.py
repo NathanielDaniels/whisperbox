@@ -43,16 +43,16 @@ class WhisperBoxService:
         self._duration_timer: threading.Timer | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
-    def _handle_command(self, cmd: dict):
+    async def _handle_command(self, cmd: dict):
         """Dispatch incoming commands from the Swift app."""
         action = cmd.get("cmd")
 
         if action == "start_recording" and self._state == "idle":
-            self._start_recording()
+            await self._start_recording()
         elif action == "stop_recording" and self._state == "recording":
-            self._stop_and_transcribe()
+            await self._stop_and_transcribe()
         elif action == "cancel_recording" and self._state == "recording":
-            self._cancel_recording()
+            await self._cancel_recording()
         elif action == "inject_text":
             # Preview mode: user confirmed text, inject it now
             text = cmd.get("text", "")
@@ -60,15 +60,15 @@ class WhisperBoxService:
                 self._injector.inject(text)
         elif action == "switch_model":
             model = cmd.get("model", "small")
-            self._switch_model(model)
+            await self._switch_model(model)
         elif action == "reload_config":
             self._config = load_config()
 
-    def _start_recording(self):
+    async def _start_recording(self):
         """Begin audio capture."""
         self._state = "recording"
         self._recorder.start()
-        self._send_event({"event": "recording_started"})
+        await self._send_event({"event": "recording_started"})
 
         # Max duration safety timer
         self._duration_timer = threading.Timer(
@@ -76,17 +76,17 @@ class WhisperBoxService:
         )
         self._duration_timer.start()
 
-    def _stop_and_transcribe(self):
+    async def _stop_and_transcribe(self):
         """Stop recording, transcribe, and inject text."""
         self._cancel_timer()
         self._recorder.stop()
         self._state = "transcribing"
-        self._send_event({"event": "recording_stopped"})
+        await self._send_event({"event": "recording_stopped"})
 
         audio = self._recorder.get_audio()
         if audio is None or len(audio) < 1600:  # Less than 100ms
             self._state = "idle"
-            self._send_event(
+            await self._send_event(
                 {"event": "transcription_error", "error": "Recording too short"}
             )
             return
@@ -107,7 +107,7 @@ class WhisperBoxService:
             if mode == "instant" and text:
                 self._injector.inject(text)
 
-            self._send_event(
+            await self._send_event(
                 {
                     "event": "transcription_complete",
                     "text": text,
@@ -115,47 +115,48 @@ class WhisperBoxService:
                 }
             )
         except Exception as e:
-            self._send_event({"event": "transcription_error", "error": str(e)})
+            await self._send_event({"event": "transcription_error", "error": str(e)})
         finally:
             self._state = "idle"
 
-    def _cancel_recording(self):
+    async def _cancel_recording(self):
         """Cancel recording without transcription."""
         self._cancel_timer()
         self._recorder.cancel()
         self._state = "idle"
-        self._send_event({"event": "recording_stopped"})
+        await self._send_event({"event": "recording_stopped"})
 
-    def _switch_model(self, model_name: str):
+    async def _switch_model(self, model_name: str):
         """Switch to a different Whisper model."""
-        self._send_event({"event": "model_loading", "model": model_name})
+        await self._send_event({"event": "model_loading", "model": model_name})
         try:
             self._transcriber.switch_model(model_name)
-            self._send_event({"event": "model_loaded"})
+            await self._send_event({"event": "model_loaded"})
         except Exception as e:
-            self._send_event({"event": "transcription_error", "error": str(e)})
+            await self._send_event({"event": "transcription_error", "error": str(e)})
 
     def _on_silence_timeout(self):
         """Called when silence exceeds the timeout during recording."""
-        if self._state == "recording":
-            self._stop_and_transcribe()
+        if self._state == "recording" and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._stop_and_transcribe(), self._loop
+            )
 
     def _on_max_duration(self):
         """Called when recording exceeds the maximum duration."""
-        if self._state == "recording":
-            self._stop_and_transcribe()
+        if self._state == "recording" and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._stop_and_transcribe(), self._loop
+            )
 
     def _cancel_timer(self):
         if self._duration_timer:
             self._duration_timer.cancel()
             self._duration_timer = None
 
-    def _send_event(self, event: dict):
+    async def _send_event(self, event: dict):
         """Send event to Swift app via socket."""
-        if self._loop:
-            asyncio.run_coroutine_threadsafe(
-                self._server.send_event(event), self._loop
-            )
+        await self._server.send_event(event)
 
     async def run(self):
         """Main entry point — load model and start socket server."""
