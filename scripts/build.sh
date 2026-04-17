@@ -47,8 +47,15 @@ cat > "$APP_BUNDLE/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-# Ad-hoc code sign so macOS persists permissions across rebuilds
-codesign --force --sign - "$APP_BUNDLE"
+# Sign with stable identity if available, otherwise fall back to ad-hoc
+CERT_NAME="WhisperBox Dev"
+if security find-identity -v -p codesigning login.keychain-db 2>/dev/null | grep -q "$CERT_NAME"; then
+    codesign --force --sign "$CERT_NAME" "$APP_BUNDLE"
+    echo "Signed with '$CERT_NAME' (stable identity)"
+else
+    codesign --force --sign - "$APP_BUNDLE"
+    echo "WARNING: Signed ad-hoc. Run scripts/create-cert.sh for stable signing."
+fi
 
 echo "=== Build complete ==="
 echo "App bundle: $APP_BUNDLE"
