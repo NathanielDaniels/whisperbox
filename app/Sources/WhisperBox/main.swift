@@ -2,6 +2,18 @@
 import AppKit
 import SwiftUI
 
+func log(_ message: String) {
+    let path = NSString(string: "~/.local/share/whisperbox/app.log").expandingTildeInPath
+    let line = "\(Date()): \(message)\n"
+    if let handle = FileHandle(forWritingAtPath: path) {
+        handle.seekToEndOfFile()
+        handle.write(line.data(using: .utf8)!)
+        handle.closeFile()
+    } else {
+        FileManager.default.createFile(atPath: path, contents: line.data(using: .utf8))
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var socketClient: SocketClient!
@@ -98,8 +110,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupHotkeys() {
         hotkeyManager = HotkeyManager()
-        hotkeyManager.onToggle = { [weak self] in
-            self?.toggleRecording()
+        hotkeyManager.onRecordStart = { [weak self] in
+            guard self?.isRecording == false else { return }
+            self?.startRecording()
+        }
+        hotkeyManager.onRecordStop = { [weak self] in
+            guard self?.isRecording == true else { return }
+            self?.stopRecording()
         }
         hotkeyManager.onCancel = { [weak self] in
             guard self?.isRecording == true else { return }
@@ -127,6 +144,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             updateMenuBarIcon(recording: true)
             hotkeyManager.setEscapeEnabled(true)
             toast.show()
+            if event["sound_feedback"] as? Bool == true {
+                NSSound(named: "Tink")?.play()
+            }
 
         case "audio_level":
             let level = event["level"] as? Double ?? 0.0
@@ -136,12 +156,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
             updateMenuBarIcon(recording: false)
             hotkeyManager.setEscapeEnabled(false)
+            if event["sound_feedback"] as? Bool == true {
+                NSSound(named: "Pop")?.play()
+            }
 
         case "transcription_complete":
             let text = event["text"] as? String ?? ""
             let preview = event["preview"] as? Bool ?? false
             if preview {
                 previewPanel.show(text: text)
+            } else if !text.isEmpty {
+                injectText(text)
             }
             toast.showTranscribed(text: text)
 
@@ -166,11 +191,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupPreviewPanel() {
         previewPanel = PreviewPanel()
         previewPanel.onConfirm = { [weak self] text in
-            // Inject text via socket command — Python handles injection
-            self?.socketClient.sendCommand([
-                "cmd": "inject_text",
-                "text": text,
-            ])
+            self?.injectText(text)
         }
     }
 
@@ -215,16 +236,54 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Actions
 
+    private func startRecording() {
+        socketClient.sendCommand(["cmd": "start_recording"])
+    }
+
+    private func stopRecording() {
+        socketClient.sendCommand(["cmd": "stop_recording"])
+    }
+
     @objc private func toggleRecording() {
         if isRecording {
-            socketClient.sendCommand(["cmd": "stop_recording"])
+            stopRecording()
         } else {
-            socketClient.sendCommand(["cmd": "start_recording"])
+            startRecording()
         }
     }
 
     private func cancelRecording() {
         socketClient.sendCommand(["cmd": "cancel_recording"])
+    }
+
+    private func injectText(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+
+        // Simulate Cmd+V via CGEvent
+        let source = CGEventSource(stateID: .hidSystemState)
+        let vKeyCode: CGKeyCode = 9  // 'v' key
+
+        if let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
+           let keyUp = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) {
+            keyDown.flags = .maskCommand
+            keyUp.flags = .maskCommand
+            keyDown.post(tap: .cgSessionEventTap)
+            keyUp.post(tap: .cgSessionEventTap)
+        } else {
+            log("ERROR: Failed to create CGEvents — check Accessibility permission")
+        }
+
+        // Restore clipboard after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            pasteboard.clearContents()
+            if let saved = saved {
+                pasteboard.setString(saved, forType: .string)
+            }
+        }
     }
 
     @objc private func switchModel(_ sender: NSMenuItem) {

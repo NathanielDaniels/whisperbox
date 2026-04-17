@@ -70,7 +70,10 @@ class WhisperBoxService:
         """Begin audio capture."""
         self._state = "recording"
         self._recorder.start()
-        await self._send_event({"event": "recording_started"})
+        await self._send_event({
+            "event": "recording_started",
+            "sound_feedback": self._config["behavior"].get("sound_feedback", True),
+        })
 
         # Max duration safety timer
         self._duration_timer = threading.Timer(
@@ -83,7 +86,10 @@ class WhisperBoxService:
         self._cancel_timer()
         self._recorder.stop()
         self._state = "transcribing"
-        await self._send_event({"event": "recording_stopped"})
+        await self._send_event({
+            "event": "recording_stopped",
+            "sound_feedback": self._config["behavior"].get("sound_feedback", True),
+        })
 
         audio = self._recorder.get_audio()
         if audio is None or len(audio) < 1600:  # Less than 100ms
@@ -114,9 +120,7 @@ class WhisperBoxService:
             )
 
             mode = self._config["behavior"].get("mode", "instant")
-            if mode == "instant" and text:
-                # Run blocking injection in thread pool
-                await loop.run_in_executor(None, self._injector.inject, text)
+            # Injection is handled by the Swift app via CGEvent
 
             await self._send_event(
                 {
@@ -135,7 +139,10 @@ class WhisperBoxService:
         self._cancel_timer()
         self._recorder.cancel()
         self._state = "idle"
-        await self._send_event({"event": "recording_stopped"})
+        await self._send_event({
+            "event": "recording_stopped",
+            "sound_feedback": False,
+        })
 
     async def _switch_model(self, model_name: str):
         """Switch to a different Whisper model."""
