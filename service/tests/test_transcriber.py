@@ -48,6 +48,22 @@ def test_transcribe_empty_audio(mock_model_cls):
 
 
 @patch("transcriber.Model")
+def test_transcribe_auto_language(mock_model_cls):
+    """When language is 'auto', pass empty string to whisper for auto-detection."""
+    mock_model = MagicMock()
+    mock_model.transcribe.return_value = [MagicMock(text="Bonjour")]
+    mock_model_cls.return_value = mock_model
+
+    t = Transcriber(model_name="small", models_dir=MODEL_DIR)
+    t.load()
+    audio = np.zeros(16000, dtype=np.float32)
+    t.transcribe(audio, language="auto")
+
+    call_args = mock_model.transcribe.call_args
+    assert call_args[1]["language"] == ""
+
+
+@patch("transcriber.Model")
 def test_switch_model(mock_model_cls):
     """Switching models should reload with the new model name."""
     t = Transcriber(model_name="small", models_dir=MODEL_DIR)

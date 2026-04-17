@@ -45,7 +45,10 @@ class Transcriber:
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
 
-        segments = self._model.transcribe(audio, language=language)
+        # "auto" triggers whisper's built-in language detection
+        lang = "" if language == "auto" else language
+
+        segments = self._model.transcribe(audio, language=lang)
         text = " ".join(seg.text.strip() for seg in segments if seg.text.strip())
         return text
 

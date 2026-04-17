@@ -28,6 +28,12 @@ def test_load_config_from_file():
     assert config["behavior"]["mode"] == "instant"
 
 
+def test_default_language_is_auto():
+    """Default language should be 'auto' for auto-detection."""
+    config = load_config("/nonexistent/path/config.toml")
+    assert config["transcription"]["language"] == "auto"
+
+
 def test_load_config_invalid_toml_returns_defaults():
     """Malformed TOML should fall back to defaults, not crash."""
     with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:

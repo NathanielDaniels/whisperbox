@@ -14,7 +14,7 @@ DEFAULT_CONFIG = {
     },
     "transcription": {
         "model": "small",
-        "language": "en",
+        "language": "auto",
     },
     "behavior": {
         "mode": "instant",
