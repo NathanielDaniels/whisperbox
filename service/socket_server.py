@@ -14,6 +14,7 @@ class SocketServer:
     def __init__(self, sock_path: str):
         self.sock_path = sock_path
         self.on_command: Callable[[dict], None] | None = None
+        self.on_client_connected: Callable[[], None] | None = None
         self._server: asyncio.AbstractServer | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._running = False
@@ -55,6 +56,10 @@ class SocketServer:
     ):
         """Handle a single client connection."""
         self._writer = writer
+        if self.on_client_connected:
+            result = self.on_client_connected()
+            if asyncio.iscoroutine(result):
+                await result
         try:
             while self._running:
                 line = await reader.readline()

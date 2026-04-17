@@ -30,6 +30,7 @@ class WhisperBoxService:
         )
         self._server = SocketServer(self._sock_path)
         self._server.on_command = self._handle_command
+        self._server.on_client_connected = self._on_client_connected
 
         self._recorder = AudioRecorder(
             silence_timeout=bc.get("silence_timeout", 10),
@@ -152,6 +153,16 @@ class WhisperBoxService:
             await self._send_event({"event": "model_loaded"})
         except Exception as e:
             await self._send_event({"event": "transcription_error", "error": str(e)})
+
+    async def _on_client_connected(self):
+        """Send current config to the Swift app on connect."""
+        hk = self._config["hotkey"]
+        bc = self._config["behavior"]
+        await self._send_event({
+            "event": "config",
+            "hotkey_combo": hk.get("combo", "ctrl+shift+space"),
+            "sound_feedback": bc.get("sound_feedback", True),
+        })
 
     def _on_audio_level(self, level: float):
         """Called from audio thread with RMS level 0.0-1.0."""
