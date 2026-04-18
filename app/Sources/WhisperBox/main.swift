@@ -265,8 +265,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func injectText(_ text: String) {
         let pasteboard = NSPasteboard.general
-        let saved = pasteboard.string(forType: .string)
-
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
@@ -282,14 +280,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyUp.post(tap: .cgSessionEventTap)
         } else {
             log("ERROR: Failed to create CGEvents — check Accessibility permission")
-        }
-
-        // Restore clipboard after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            pasteboard.clearContents()
-            if let saved = saved {
-                pasteboard.setString(saved, forType: .string)
-            }
         }
     }
 
