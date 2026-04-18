@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewPanel: PreviewPanel!
     private var pythonProcess: Process?
     private var isRecording = false
+    private var appendMode = false
     private var restartCount = 0
     private let maxRestarts = 3
 
@@ -74,6 +75,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
         recordItem.target = self
         menu.addItem(recordItem)
+
+        let clearItem = NSMenuItem(
+            title: "Clear Buffer",
+            action: #selector(clearBuffer),
+            keyEquivalent: ""
+        )
+        clearItem.target = self
+        menu.addItem(clearItem)
 
         menu.addItem(.separator())
 
@@ -161,11 +170,26 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case "transcription_complete":
             let text = event["text"] as? String ?? ""
             let preview = event["preview"] as? Bool ?? false
+            let isAppend = event["append"] as? Bool ?? false
+            let fullText = event["full_text"] as? String ?? text
+
             if preview {
                 previewPanel.show(text: text)
             } else if !text.isEmpty {
-                injectText(text)
+                if isAppend {
+                    injectText(" " + text)
+                } else {
+                    injectText(text)
+                }
             }
+
+            // In append mode, clipboard gets the full accumulated text
+            if appendMode && !fullText.isEmpty {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(fullText, forType: .string)
+            }
+
             toast.showTranscribed(text: text)
 
         case "transcription_error":
@@ -187,6 +211,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     log("Failed to parse hotkey combo '\(combo)', using default")
                 }
             }
+            appendMode = event["append_mode"] as? Bool ?? false
 
         default:
             break
@@ -257,6 +282,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             startRecording()
         }
+    }
+
+    @objc private func clearBuffer() {
+        socketClient.sendCommand(["cmd": "clear_buffer"])
     }
 
     private func cancelRecording() {
