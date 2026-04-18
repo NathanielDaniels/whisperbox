@@ -44,6 +44,7 @@ class WhisperBoxService:
         self._state = "idle"  # idle, recording, transcribing
         self._max_duration = bc.get("max_duration", 300)
         self._duration_timer: threading.Timer | None = None
+        self._append_buffer: list[str] = []
         self._loop: asyncio.AbstractEventLoop | None = None
 
     async def _handle_command(self, cmd: dict):
@@ -66,6 +67,8 @@ class WhisperBoxService:
             await self._switch_model(model)
         elif action == "reload_config":
             self._config = load_config()
+        elif action == "clear_buffer":
+            self._append_buffer.clear()
 
     async def _start_recording(self):
         """Begin audio capture."""
@@ -122,15 +125,20 @@ class WhisperBoxService:
             )
 
             mode = self._config["behavior"].get("mode", "instant")
-            # Injection is handled by the Swift app via CGEvent
+            append_mode = self._config["behavior"].get("append_mode", False)
 
-            await self._send_event(
-                {
-                    "event": "transcription_complete",
-                    "text": text,
-                    "preview": mode == "preview",
-                }
-            )
+            event = {
+                "event": "transcription_complete",
+                "text": text,
+                "preview": mode == "preview",
+            }
+
+            if append_mode:
+                self._append_buffer.append(text)
+                event["full_text"] = " ".join(self._append_buffer)
+                event["append"] = len(self._append_buffer) > 1
+
+            await self._send_event(event)
         except Exception as e:
             await self._send_event({"event": "transcription_error", "error": str(e)})
         finally:
@@ -141,6 +149,7 @@ class WhisperBoxService:
         self._cancel_timer()
         self._recorder.cancel()
         self._state = "idle"
+        self._append_buffer.clear()
         await self._send_event({
             "event": "recording_stopped",
             "sound_feedback": False,
@@ -163,6 +172,7 @@ class WhisperBoxService:
             "event": "config",
             "hotkey_combo": hk.get("combo", "ctrl+shift+space"),
             "sound_feedback": bc.get("sound_feedback", True),
+            "append_mode": bc.get("append_mode", False),
         })
 
     def _on_audio_level(self, level: float):
