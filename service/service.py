@@ -67,6 +67,7 @@ class WhisperBoxService:
             await self._switch_model(model)
         elif action == "reload_config":
             self._config = load_config()
+            self._append_buffer.clear()
         elif action == "clear_buffer":
             self._append_buffer.clear()
 

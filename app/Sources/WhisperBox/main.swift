@@ -21,6 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var toast: ToastOverlay!
     private var previewPanel: PreviewPanel!
     private var pythonProcess: Process?
+    private var clearMenuItem: NSMenuItem!
     private var isRecording = false
     private var appendMode = false
     private var restartCount = 0
@@ -76,13 +77,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordItem.target = self
         menu.addItem(recordItem)
 
-        let clearItem = NSMenuItem(
+        clearMenuItem = NSMenuItem(
             title: "Clear Buffer",
             action: #selector(clearBuffer),
             keyEquivalent: ""
         )
-        clearItem.target = self
-        menu.addItem(clearItem)
+        clearMenuItem.target = self
+        clearMenuItem.isHidden = true  // hidden by default since append_mode defaults to false
+        menu.addItem(clearMenuItem)
 
         menu.addItem(.separator())
 
@@ -212,6 +214,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             appendMode = event["append_mode"] as? Bool ?? false
+            clearMenuItem.isHidden = !appendMode
 
         default:
             break
