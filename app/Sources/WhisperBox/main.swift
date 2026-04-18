@@ -159,6 +159,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             updateMenuBarIcon(recording: true)
             hotkeyManager.setEscapeEnabled(true)
             toast.show()
+            if event["sound_feedback"] as? Bool == true {
+                SoundPlayer.playRecordStart()
+            }
 
         case "audio_level":
             let level = event["level"] as? Double ?? 0.0
@@ -168,6 +171,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
             updateMenuBarIcon(recording: false)
             hotkeyManager.setEscapeEnabled(false)
+            if event["sound_feedback"] as? Bool == true {
+                SoundPlayer.playRecordStop()
+            }
 
         case "transcription_complete":
             let text = event["text"] as? String ?? ""
