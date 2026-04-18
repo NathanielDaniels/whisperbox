@@ -20,7 +20,7 @@ class ToastOverlay {
 
         let view = ToastView(state: toastState)
         let hosting = NSHostingView(rootView: view)
-        hosting.frame = NSRect(x: 0, y: 0, width: 180, height: 50)
+        hosting.frame = NSRect(x: 0, y: 0, width: 200, height: 50)
 
         let window = NSPanel(
             contentRect: hosting.frame,
@@ -59,10 +59,12 @@ class ToastOverlay {
 
     func showTranscribed(text: String) {
         toastState.isRecording = false
-        let preview = text.count > 30 ? String(text.prefix(30)) + "..." : text
-        toastState.statusText = preview.isEmpty ? "Transcribed!" : preview
+        toastState.statusText = text.isEmpty ? "Transcribed!" : text
+        resizeToFit()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        // Longer text gets more reading time (1.5s base + 0.5s per 50 chars)
+        let displayTime = 1.5 + Double(text.count / 50) * 0.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + displayTime) { [weak self] in
             self?.hide()
         }
     }
@@ -77,6 +79,25 @@ class ToastOverlay {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             self?.hide()
+        }
+    }
+
+    private func resizeToFit() {
+        guard let window = self.window, let hosting = self.hostingView else { return }
+
+        // Expand hosting view to max width so SwiftUI can lay out text at full width,
+        // then ask for fittingSize to get the actual needed dimensions
+        hosting.frame = NSRect(x: 0, y: 0, width: 400, height: 500)
+        hosting.layoutSubtreeIfNeeded()
+        let fittingSize = hosting.fittingSize
+        hosting.frame = NSRect(x: 0, y: 0, width: fittingSize.width, height: fittingSize.height)
+
+        // Re-center horizontally, keep at top of screen
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let x = screenFrame.midX - fittingSize.width / 2
+            let y = screenFrame.maxY - fittingSize.height - 20
+            window.setFrame(NSRect(x: x, y: y, width: fittingSize.width, height: fittingSize.height), display: true, animate: true)
         }
     }
 
@@ -116,12 +137,14 @@ struct ToastView: View {
             Text(state.statusText)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.white)
-                .lineLimit(1)
+                .lineLimit(5)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .frame(maxWidth: 400)
         .background(
-            Capsule()
+            RoundedRectangle(cornerRadius: 20)
                 .fill(Color.black.opacity(0.85))
         )
     }
