@@ -38,6 +38,8 @@ WhisperBox is a macOS menu bar app that lets you dictate text into any applicati
 - **Smart line breaks** — say "new line" or "new paragraph" for actual whitespace
 - **Append mode** — multiple dictations accumulate; clipboard gets the full text
 - **Filler word stripping** — removes "um", "uh", "er", "ah"
+- **Media pause/resume** — automatically pauses YouTube, Spotify, etc. during recording, resumes after
+- **Whisper artifact stripping** — removes `[BLANK_AUDIO]`, `[Music]`, `[Silence]` and other bracketed tags
 - **Expandable toast** — shows full transcription (up to 400px wide, 5 lines), display time scales with text length
 - **Preview mode** — optional confirmation before pasting
 - **Escape to cancel** — discard recording without pasting
