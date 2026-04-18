@@ -118,6 +118,7 @@ class WhisperBoxService:
                 capitalize=pp.get("auto_capitalize", True),
                 punctuate=pp.get("auto_punctuate", True),
                 strip_fillers=pp.get("strip_fillers", True),
+                smart_line_breaks=pp.get("smart_line_breaks", True),
             )
 
             mode = self._config["behavior"].get("mode", "instant")

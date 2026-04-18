@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
         "strip_fillers": True,
         "auto_capitalize": True,
         "auto_punctuate": True,
+        "smart_line_breaks": True,
     },
     "indicator": {
         "enabled": True,

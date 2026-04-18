@@ -9,12 +9,19 @@ FILLER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Order matters: "new paragraph" before "new line" so longer match wins
+LINE_BREAK_PHRASES = [
+    (re.compile(r"\bnew\s+paragraph\b", re.IGNORECASE), "\n\n"),
+    (re.compile(r"\bnew\s+line\b", re.IGNORECASE), "\n"),
+]
+
 
 def postprocess(
     text: str,
     capitalize: bool = True,
     punctuate: bool = True,
     strip_fillers: bool = True,
+    smart_line_breaks: bool = False,
 ) -> str:
     """Clean up transcribed text.
 
@@ -23,6 +30,7 @@ def postprocess(
         capitalize: Capitalize the first letter.
         punctuate: Add a period if no ending punctuation.
         strip_fillers: Remove filler words (um, uh, etc).
+        smart_line_breaks: Convert "new line"/"new paragraph" to line breaks.
 
     Returns:
         Cleaned text string.
@@ -38,10 +46,27 @@ def postprocess(
     if not text:
         return ""
 
-    if capitalize and text:
-        text = text[0].upper() + text[1:]
+    if smart_line_breaks:
+        for pattern, replacement in LINE_BREAK_PHRASES:
+            text = pattern.sub(replacement, text)
+        # Clean up spaces around line breaks
+        text = re.sub(r" *\n *", "\n", text)
+        text = text.strip()
 
-    if punctuate and text and text[-1] not in ".!?":
+    if not text:
+        return ""
+
+    if capitalize and text:
+        # Capitalize first letter of text and first letter after each line break
+        lines = text.split("\n")
+        capitalized = []
+        for line in lines:
+            if line:
+                line = line[0].upper() + line[1:]
+            capitalized.append(line)
+        text = "\n".join(capitalized)
+
+    if punctuate and text and text[-1] not in ".!?\n":
         text += "."
 
     return text
