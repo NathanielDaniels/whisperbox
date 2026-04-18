@@ -21,7 +21,7 @@ DEFAULT_CONFIG = {
         "sound_feedback": True,
         "max_duration": 300,
         "silence_timeout": 10,
-        "append_mode": False,
+        "append_mode": True,
     },
     "postprocessing": {
         "strip_fillers": True,

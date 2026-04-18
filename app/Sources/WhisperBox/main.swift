@@ -185,11 +185,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            // In append mode, clipboard gets the full accumulated text
+            // In append mode, clipboard gets the full accumulated text after paste completes
             if appendMode && !fullText.isEmpty {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(fullText, forType: .string)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(fullText, forType: .string)
+                }
             }
 
             toast.showTranscribed(text: text)
