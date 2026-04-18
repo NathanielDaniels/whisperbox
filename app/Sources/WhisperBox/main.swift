@@ -58,6 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             button.image = image
         }
+        // Update menu item title
+        if let menu = statusItem.menu, let recordItem = menu.items.first {
+            recordItem.title = recording ? "Stop Recording" : "Start Recording"
+        }
     }
 
     private func buildMenu() {
@@ -144,9 +148,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             updateMenuBarIcon(recording: true)
             hotkeyManager.setEscapeEnabled(true)
             toast.show()
-            if event["sound_feedback"] as? Bool == true {
-                NSSound(named: "Tink")?.play()
-            }
 
         case "audio_level":
             let level = event["level"] as? Double ?? 0.0
@@ -156,9 +157,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
             updateMenuBarIcon(recording: false)
             hotkeyManager.setEscapeEnabled(false)
-            if event["sound_feedback"] as? Bool == true {
-                NSSound(named: "Pop")?.play()
-            }
 
         case "transcription_complete":
             let text = event["text"] as? String ?? ""
@@ -182,9 +180,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             toast.showTranscribed(text: "Model ready")
 
         case "config":
+            // Hotkey is registered at startup; only re-register if user changed it
             let combo = event["hotkey_combo"] as? String ?? "ctrl+shift+space"
-            if !hotkeyManager.registerFromString(combo) {
-                log("Failed to parse hotkey combo '\(combo)', using default")
+            if combo != "ctrl+shift+space" {
+                if !hotkeyManager.registerFromString(combo) {
+                    log("Failed to parse hotkey combo '\(combo)', using default")
+                }
             }
 
         default:
