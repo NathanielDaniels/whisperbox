@@ -24,9 +24,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var clearMenuItem: NSMenuItem!
     private var isRecording = false
     private var appendMode = false
+    private var pauseMediaEnabled = true
     private var restartCount = 0
     private let maxRestarts = 3
-    private var didPauseMedia = false
+    private var didMuteAudio = false
+    private var wasMutedBefore = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility permission
@@ -229,6 +231,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             appendMode = event["append_mode"] as? Bool ?? false
+            pauseMediaEnabled = event["pause_media"] as? Bool ?? true
             clearMenuItem.isHidden = !appendMode
 
         default:
@@ -387,54 +390,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Media Pause/Resume
+    // MARK: - Audio Mute/Unmute
+    //
+    // Mutes system audio during recording so media doesn't interfere
+    // with Whisper. Restores previous mute state after transcription.
+    // Videos keep playing silently — no play/pause state changes.
 
     private func pauseMedia() {
-        // Only pause if we haven't already — prevents flip-flop on rapid recordings
-        guard !didPauseMedia else { return }
-        sendMediaPlayPause()
-        didPauseMedia = true
-    }
-
-    private func resumeMedia() {
-        if didPauseMedia {
-            sendMediaPlayPause()
-            didPauseMedia = false
+        guard pauseMediaEnabled, !didMuteAudio else { return }
+        // Save current mute state so we don't unmute if user was already muted
+        wasMutedBefore = isSystemMuted()
+        if !wasMutedBefore {
+            setSystemMuted(true)
+            didMuteAudio = true
         }
     }
 
-    private func sendMediaPlayPause() {
-        // Use IOKit HID to post a media key event — this is what the physical
-        // play/pause key on the keyboard does. NX_KEYTYPE_PLAY = 16.
-        let keyCode = UInt32(16) // NX_KEYTYPE_PLAY
+    private func resumeMedia() {
+        if didMuteAudio {
+            setSystemMuted(false)
+            didMuteAudio = false
+        }
+    }
 
-        // Key down
-        let downEvent = NSEvent.otherEvent(
-            with: .systemDefined,
-            location: .zero,
-            modifierFlags: NSEvent.ModifierFlags(rawValue: 0xa00),
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8,
-            data1: Int((keyCode << 16) | (0xa << 8)),
-            data2: -1
-        )
-        downEvent?.cgEvent?.post(tap: .cghidEventTap)
+    private func isSystemMuted() -> Bool {
+        let script = NSAppleScript(source: "output muted of (get volume settings)")
+        var error: NSDictionary?
+        let result = script?.executeAndReturnError(&error)
+        return result?.booleanValue ?? false
+    }
 
-        // Key up
-        let upEvent = NSEvent.otherEvent(
-            with: .systemDefined,
-            location: .zero,
-            modifierFlags: NSEvent.ModifierFlags(rawValue: 0xb00),
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8,
-            data1: Int((keyCode << 16) | (0xb << 8)),
-            data2: -1
-        )
-        upEvent?.cgEvent?.post(tap: .cghidEventTap)
+    private func setSystemMuted(_ muted: Bool) {
+        let script = NSAppleScript(source: "set volume output muted \(muted)")
+        var error: NSDictionary?
+        script?.executeAndReturnError(&error)
     }
 
     @objc private func switchModel(_ sender: NSMenuItem) {

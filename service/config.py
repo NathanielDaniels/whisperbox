@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
         "max_duration": 300,
         "silence_timeout": 10,
         "append_mode": True,
+        "pause_media": True,
     },
     "postprocessing": {
         "strip_fillers": True,

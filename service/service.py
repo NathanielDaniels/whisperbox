@@ -192,6 +192,7 @@ class WhisperBoxService:
             "hotkey_combo": hk.get("combo", "ctrl+shift+space"),
             "sound_feedback": bc.get("sound_feedback", True),
             "append_mode": bc.get("append_mode", False),
+            "pause_media": bc.get("pause_media", True),
         })
 
     def _on_audio_level(self, level: float):
