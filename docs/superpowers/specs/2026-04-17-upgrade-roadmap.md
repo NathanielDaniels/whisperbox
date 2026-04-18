@@ -6,7 +6,7 @@
 ## Batch 1 — Dev & UX Foundations
 1. ~~Stable code signing~~ — DONE
 2. ~~Configurable hotkey~~ — DONE
-3. Sound feedback — DEFERRED (NSSound doesn't work in accessory apps, needs AudioToolbox or bundled sound files)
+3. ~~Sound feedback~~ — DONE (AudioToolbox with system .aiff files, not NSSound)
 4. ~~Multi-language auto-detect~~ — DONE
 
 ## Batch 2 — Transcription Quality
