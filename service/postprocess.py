@@ -39,6 +39,11 @@ def postprocess(
     if not text:
         return ""
 
+    # Strip Whisper artifacts like [BLANK_AUDIO], [Music], [Silence], etc.
+    text = re.sub(r"\[.*?\]", "", text).strip()
+    if not text:
+        return ""
+
     if strip_fillers:
         text = FILLER_PATTERN.sub("", text)
         text = re.sub(r"\s+", " ", text).strip()

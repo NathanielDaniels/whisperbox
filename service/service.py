@@ -10,6 +10,7 @@ import os
 import signal
 import sys
 import threading
+import time
 
 from audio import AudioRecorder
 from config import load_config
@@ -45,6 +46,8 @@ class WhisperBoxService:
         self._max_duration = bc.get("max_duration", 300)
         self._duration_timer: threading.Timer | None = None
         self._append_buffer: list[str] = []
+        self._last_transcription_time: float = 0
+        self._append_timeout = 30  # seconds before buffer auto-clears
         self._loop: asyncio.AbstractEventLoop | None = None
 
     async def _handle_command(self, cmd: dict):
@@ -125,6 +128,17 @@ class WhisperBoxService:
                 smart_line_breaks=pp.get("smart_line_breaks", True),
             )
 
+            # If transcription produced no meaningful text, notify Swift so it
+            # can dismiss the toast and resume media, then bail out
+            if not text or text.strip().strip(".") == "":
+                await self._send_event({
+                    "event": "transcription_complete",
+                    "text": "",
+                    "preview": False,
+                })
+                self._state = "idle"
+                return
+
             mode = self._config["behavior"].get("mode", "instant")
             append_mode = self._config["behavior"].get("append_mode", False)
 
@@ -135,6 +149,10 @@ class WhisperBoxService:
             }
 
             if append_mode:
+                now = time.monotonic()
+                if self._last_transcription_time and now - self._last_transcription_time > self._append_timeout:
+                    self._append_buffer.clear()
+                self._last_transcription_time = now
                 self._append_buffer.append(text)
                 event["full_text"] = " ".join(self._append_buffer)
                 event["append"] = len(self._append_buffer) > 1

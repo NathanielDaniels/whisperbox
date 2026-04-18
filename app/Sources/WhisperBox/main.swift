@@ -26,6 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var appendMode = false
     private var restartCount = 0
     private let maxRestarts = 3
+    private var didPauseMedia = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Check accessibility permission
@@ -158,6 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             updateMenuBarIcon(recording: true)
             hotkeyManager.setEscapeEnabled(true)
+            pauseMedia()
             toast.show()
             if event["sound_feedback"] as? Bool == true {
                 SoundPlayer.playRecordStart()
@@ -178,13 +180,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case "transcription_complete":
             let text = event["text"] as? String ?? ""
             let preview = event["preview"] as? Bool ?? false
-            let isAppend = event["append"] as? Bool ?? false
             let fullText = event["full_text"] as? String ?? text
 
             if preview {
                 previewPanel.show(text: text)
             } else if !text.isEmpty {
-                if isAppend {
+                if needsLeadingSpace() {
                     injectText(" " + text)
                 } else {
                     injectText(text)
@@ -200,11 +201,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            toast.showTranscribed(text: text)
+            if text.isEmpty {
+                toast.hide()
+            } else {
+                toast.showTranscribed(text: text)
+            }
+            resumeMedia()
 
         case "transcription_error":
             let error = event["error"] as? String ?? "Unknown error"
             toast.showError(error)
+            resumeMedia()
 
         case "model_loading":
             let _ = event["model"] as? String ?? ""
@@ -301,6 +308,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelRecording() {
         socketClient.sendCommand(["cmd": "cancel_recording"])
+        resumeMedia()
+    }
+
+    /// Check the character before the cursor in the focused text element.
+    /// Returns nil if Accessibility can't read it, "" if at position 0/empty,
+    /// or the single character before the cursor.
+    private func characterBeforeCursor() -> String? {
+        guard let focusedElement = NSWorkspace.shared.frontmostApplication?.processIdentifier else {
+            return nil
+        }
+
+        let appRef = AXUIElementCreateApplication(focusedElement)
+        var focusedUI: AnyObject?
+        guard AXUIElementCopyAttributeValue(appRef, kAXFocusedUIElementAttribute as CFString, &focusedUI) == .success else {
+            return nil
+        }
+        let element = focusedUI as! AXUIElement
+
+        // Get the selected text range (cursor position)
+        var rangeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success else {
+            return nil
+        }
+        var range = CFRange(location: 0, length: 0)
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+            return nil
+        }
+
+        // Cursor at position 0 — nothing before it
+        if range.location == 0 {
+            return ""
+        }
+
+        // Get the character just before the cursor
+        var charRange = CFRange(location: range.location - 1, length: 1)
+        guard let axCharRange = AXValueCreate(.cfRange, &charRange) else { return nil }
+
+        // Use parameterized attribute to get string for range
+        var charValue: AnyObject?
+        guard AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, axCharRange, &charValue) == .success else {
+            return nil
+        }
+
+        return charValue as? String
+    }
+
+    /// Determine if a space should be prepended before injecting text.
+    private func needsLeadingSpace() -> Bool {
+        guard let charBefore = characterBeforeCursor() else {
+            // Can't read — default to space (safer than no space)
+            return true
+        }
+        if charBefore.isEmpty {
+            return false  // At position 0 or empty field
+        }
+        // Don't add space if there's already whitespace or newline
+        return !charBefore.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func injectText(_ text: String) {
@@ -321,6 +385,56 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             log("ERROR: Failed to create CGEvents — check Accessibility permission")
         }
+    }
+
+    // MARK: - Media Pause/Resume
+
+    private func pauseMedia() {
+        // Only pause if we haven't already — prevents flip-flop on rapid recordings
+        guard !didPauseMedia else { return }
+        sendMediaPlayPause()
+        didPauseMedia = true
+    }
+
+    private func resumeMedia() {
+        if didPauseMedia {
+            sendMediaPlayPause()
+            didPauseMedia = false
+        }
+    }
+
+    private func sendMediaPlayPause() {
+        // Use IOKit HID to post a media key event — this is what the physical
+        // play/pause key on the keyboard does. NX_KEYTYPE_PLAY = 16.
+        let keyCode = UInt32(16) // NX_KEYTYPE_PLAY
+
+        // Key down
+        let downEvent = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: NSEvent.ModifierFlags(rawValue: 0xa00),
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: Int((keyCode << 16) | (0xa << 8)),
+            data2: -1
+        )
+        downEvent?.cgEvent?.post(tap: .cghidEventTap)
+
+        // Key up
+        let upEvent = NSEvent.otherEvent(
+            with: .systemDefined,
+            location: .zero,
+            modifierFlags: NSEvent.ModifierFlags(rawValue: 0xb00),
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            subtype: 8,
+            data1: Int((keyCode << 16) | (0xb << 8)),
+            data2: -1
+        )
+        upEvent?.cgEvent?.post(tap: .cghidEventTap)
     }
 
     @objc private func switchModel(_ sender: NSMenuItem) {
