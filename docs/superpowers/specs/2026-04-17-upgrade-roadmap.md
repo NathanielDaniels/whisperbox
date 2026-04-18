@@ -10,8 +10,8 @@
 4. ~~Multi-language auto-detect~~ — DONE
 
 ## Batch 2 — Transcription Quality
-5. Smart punctuation & formatting — detect "new line", "period", "comma" and convert to actual punctuation/formatting
-6. Append mode — option to append to existing text instead of replacing clipboard
+5. ~~Smart line breaks~~ — DONE (scoped down from smart punctuation; converts "new line"/"new paragraph" to actual whitespace)
+6. ~~Append mode~~ — DONE (buffer accumulates text, clipboard gets full text, Clear Buffer menu item)
 
 ## Batch 3 — Intelligence Layer
 7. Per-app context — different post-processing rules per app (e.g., no capitalization in terminal)
