@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 
+from ai_polish import AIPolisher
 from audio import AudioRecorder
 from config import load_config
 from injector import TextInjector
@@ -41,6 +42,8 @@ class WhisperBoxService:
 
         self._transcriber = Transcriber(model_name=tc.get("model", "small"))
         self._injector = TextInjector()
+        self._ai_polisher = AIPolisher(self._config)
+        self._polish_task: asyncio.Task | None = None
 
         self._state = "idle"  # idle, recording, transcribing
         self._max_duration = bc.get("max_duration", 300)
@@ -158,10 +161,30 @@ class WhisperBoxService:
                 event["append"] = len(self._append_buffer) > 1
 
             await self._send_event(event)
+
+            # Fire-and-forget AI polish in background
+            if self._ai_polisher.is_available:
+                if self._polish_task and not self._polish_task.done():
+                    self._polish_task.cancel()
+                self._polish_task = asyncio.create_task(self._polish_and_notify(text))
         except Exception as e:
             await self._send_event({"event": "transcription_error", "error": str(e)})
         finally:
             self._state = "idle"
+
+    async def _polish_and_notify(self, text: str):
+        """Run AI polish in background, send result to Swift if different."""
+        try:
+            polished = await self._ai_polisher.polish(text)
+            if polished and polished.strip() != text.strip():
+                await self._send_event({
+                    "event": "ai_polish_complete",
+                    "text": polished,
+                })
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass  # Silently fail — raw text is already pasted
 
     async def _cancel_recording(self):
         """Cancel recording without transcription."""

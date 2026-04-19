@@ -30,6 +30,13 @@ DEFAULT_CONFIG = {
         "auto_punctuate": True,
         "smart_line_breaks": True,
     },
+    "ai": {
+        "enabled": True,
+        "endpoint": "http://127.0.0.1:1234/v1/chat/completions",
+        "model": "google/gemma-3-12b",
+        "max_chars": 5000,
+        "system_prompt": "Fix only grammar and punctuation errors. Do not change word choice, rephrase, or rewrite. Keep every original word unless it is a clear grammar mistake. Return only the corrected text with no explanation.",
+    },
     "indicator": {
         "enabled": True,
         "position": "top-center",

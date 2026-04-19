@@ -344,6 +344,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             clearMenuItem.isHidden = !appendMode
             updateToggleIcons()
 
+        case "ai_polish_complete":
+            let polished = event["text"] as? String ?? ""
+            if !polished.isEmpty {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(polished, forType: .string)
+                toast.showTranscribed(text: "Polished — ⌘V")
+            }
+
         default:
             break
         }
