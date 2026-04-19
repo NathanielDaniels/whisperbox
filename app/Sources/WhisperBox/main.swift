@@ -36,6 +36,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var wasMutedBefore = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Kill any orphaned Python service processes from previous crashes
+        killOrphanedServices()
+
         // Check accessibility permission
         PermissionsCheck.promptIfNeeded()
 
@@ -372,6 +375,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // MARK: - Python Service
+
+    private func killOrphanedServices() {
+        // Kill any leftover Python service processes from previous crashes
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        task.arguments = ["-f", "whisperbox/service/service.py"]
+        try? task.run()
+        task.waitUntilExit()
+        // Clean up stale socket
+        let sockPath = NSString(string: "~/.local/share/whisperbox/whisperbox.sock").expandingTildeInPath
+        try? FileManager.default.removeItem(atPath: sockPath)
+    }
 
     private func startPythonService() {
         let whisperboxDir = NSString(string: "~/whisperbox").expandingTildeInPath
