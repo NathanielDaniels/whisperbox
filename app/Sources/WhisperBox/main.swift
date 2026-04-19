@@ -418,6 +418,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopRecording() {
         socketClient.sendCommand(["cmd": "stop_recording"])
+        isRecording = false
+        updateMenuBarIcon(recording: false)
+        hotkeyManager.setEscapeEnabled(false)
     }
 
     @objc private func toggleRecording() {
@@ -434,7 +437,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func cancelRecording() {
         socketClient.sendCommand(["cmd": "cancel_recording"])
+        isRecording = false
+        updateMenuBarIcon(recording: false)
+        hotkeyManager.setEscapeEnabled(false)
         resumeMedia()
+        toast.hide()
     }
 
     /// Check the character before the cursor in the focused text element.
