@@ -22,9 +22,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewPanel: PreviewPanel!
     private var pythonProcess: Process?
     private var clearMenuItem: NSMenuItem!
+    private var appendMenuItem: NSMenuItem!
+    private var muteMenuItem: NSMenuItem!
+    private var historyMenu: NSMenu!
     private var isRecording = false
     private var appendMode = false
     private var pauseMediaEnabled = true
+    private var transcriptionHistory: [String] = []
+    private let maxHistoryItems = 10
     private var restartCount = 0
     private let maxRestarts = 3
     private var didMuteAudio = false
@@ -72,6 +77,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildMenu() {
         let menu = NSMenu()
 
+        // Record
         let recordItem = NSMenuItem(
             title: "Start Recording",
             action: #selector(toggleRecording),
@@ -80,16 +86,44 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         recordItem.target = self
         menu.addItem(recordItem)
 
+        menu.addItem(.separator())
+
+        // Toggles
+        appendMenuItem = NSMenuItem(
+            title: "Append Mode",
+            action: #selector(toggleAppendMode),
+            keyEquivalent: ""
+        )
+        appendMenuItem.target = self
+        menu.addItem(appendMenuItem)
+
         clearMenuItem = NSMenuItem(
             title: "Clear Buffer",
             action: #selector(clearBuffer),
             keyEquivalent: ""
         )
         clearMenuItem.target = self
-        clearMenuItem.isHidden = true  // hidden by default since append_mode defaults to false
+        clearMenuItem.isHidden = true
         menu.addItem(clearMenuItem)
 
+        muteMenuItem = NSMenuItem(
+            title: "Mute During Recording",
+            action: #selector(toggleMuteDuringRecording),
+            keyEquivalent: ""
+        )
+        muteMenuItem.target = self
+        menu.addItem(muteMenuItem)
+
+        updateToggleIcons()
+
         menu.addItem(.separator())
+
+        // Dictation history
+        historyMenu = NSMenu()
+        let historyItem = NSMenuItem(title: "Dictation History", action: nil, keyEquivalent: "")
+        historyItem.submenu = historyMenu
+        updateHistoryMenu()
+        menu.addItem(historyItem)
 
         // Model submenu
         let modelMenu = NSMenu()
@@ -102,6 +136,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let modelItem = NSMenuItem(title: "Model", action: nil, keyEquivalent: "")
         modelItem.submenu = modelMenu
         menu.addItem(modelItem)
+
+        menu.addItem(.separator())
 
         let settingsItem = NSMenuItem(
             title: "Settings...",
@@ -122,6 +158,75 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+    }
+
+    private func updateHistoryMenu() {
+        historyMenu.removeAllItems()
+        if transcriptionHistory.isEmpty {
+            let emptyItem = NSMenuItem(title: "No history", action: nil, keyEquivalent: "")
+            emptyItem.isEnabled = false
+            historyMenu.addItem(emptyItem)
+        } else {
+            for (i, text) in transcriptionHistory.reversed().enumerated() {
+                let preview = text.count > 50 ? String(text.prefix(50)) + "..." : text
+                let item = NSMenuItem(title: preview, action: #selector(copyHistoryItem(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = transcriptionHistory.count - 1 - i
+                historyMenu.addItem(item)
+            }
+            historyMenu.addItem(.separator())
+            let clearItem = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+            clearItem.target = self
+            historyMenu.addItem(clearItem)
+        }
+    }
+
+    private func addToHistory(_ text: String) {
+        guard !text.isEmpty else { return }
+        transcriptionHistory.append(text)
+        if transcriptionHistory.count > maxHistoryItems {
+            transcriptionHistory.removeFirst()
+        }
+        updateHistoryMenu()
+    }
+
+    @objc private func toggleAppendMode() {
+        appendMode.toggle()
+        clearMenuItem.isHidden = !appendMode
+        if !appendMode {
+            socketClient.sendCommand(["cmd": "clear_buffer"])
+        }
+        updateToggleIcons()
+    }
+
+    @objc private func toggleMuteDuringRecording() {
+        pauseMediaEnabled.toggle()
+        updateToggleIcons()
+    }
+
+    private func updateToggleIcons() {
+        // Append mode: text.append vs text.badge.xmark
+        let appendIcon = appendMode ? "text.append" : "text.badge.xmark"
+        appendMenuItem.image = NSImage(systemSymbolName: appendIcon, accessibilityDescription: nil)
+        appendMenuItem.state = .off  // no checkmark, icon shows state
+
+        // Mute: speaker.slash.fill (muting on) vs speaker.wave.2 (muting off)
+        let muteIcon = pauseMediaEnabled ? "speaker.slash.fill" : "speaker.wave.2"
+        muteMenuItem.image = NSImage(systemSymbolName: muteIcon, accessibilityDescription: nil)
+        muteMenuItem.state = .off  // no checkmark, icon shows state
+    }
+
+    @objc private func copyHistoryItem(_ sender: NSMenuItem) {
+        let index = sender.tag
+        guard index >= 0, index < transcriptionHistory.count else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(transcriptionHistory[index], forType: .string)
+    }
+
+    @objc private func clearHistory() {
+        transcriptionHistory.removeAll()
+        updateHistoryMenu()
     }
 
     // MARK: - Hotkeys
@@ -161,10 +266,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = true
             updateMenuBarIcon(recording: true)
             hotkeyManager.setEscapeEnabled(true)
-            pauseMedia()
             toast.show()
             if event["sound_feedback"] as? Bool == true {
                 SoundPlayer.playRecordStart()
+            }
+            // Mute after sound plays so the start sound is audible
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.pauseMedia()
             }
 
         case "audio_level":
@@ -175,6 +283,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             isRecording = false
             updateMenuBarIcon(recording: false)
             hotkeyManager.setEscapeEnabled(false)
+            // Unmute before stop sound so it's audible
+            resumeMedia()
             if event["sound_feedback"] as? Bool == true {
                 SoundPlayer.playRecordStop()
             }
@@ -207,13 +317,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 toast.hide()
             } else {
                 toast.showTranscribed(text: text)
+                addToHistory(text)
             }
-            resumeMedia()
 
         case "transcription_error":
             let error = event["error"] as? String ?? "Unknown error"
             toast.showError(error)
-            resumeMedia()
 
         case "model_loading":
             let _ = event["model"] as? String ?? ""
@@ -233,6 +342,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             appendMode = event["append_mode"] as? Bool ?? false
             pauseMediaEnabled = event["pause_media"] as? Bool ?? true
             clearMenuItem.isHidden = !appendMode
+            updateToggleIcons()
 
         default:
             break
