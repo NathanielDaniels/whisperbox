@@ -38,12 +38,15 @@ WhisperBox is a macOS menu bar app that lets you dictate text into any applicati
 - **Smart line breaks** — say "new line" or "new paragraph" for actual whitespace
 - **Append mode** — multiple dictations accumulate; clipboard gets the full text
 - **Filler word stripping** — removes "um", "uh", "er", "ah"
-- **Media pause/resume** — automatically pauses YouTube, Spotify, etc. during recording, resumes after
+- **AI post-processing** — background grammar/punctuation cleanup via local LLM (LM Studio + Gemma 3 12B). Polished text lands on clipboard with a toast notification
+- **System audio mute** — mutes speakers during recording so media doesn't interfere with Whisper, unmutes after. Toggleable from menu bar
+- **Silence countdown** — big red 3-2-1 countdown in toast when silence is about to trigger auto-stop. Resets if you start speaking again
+- **Menu bar toggles** — Append Mode and Mute During Recording toggles with SF Symbol icons, plus Dictation History submenu (last 10 transcriptions, click to copy)
 - **Whisper artifact stripping** — removes `[BLANK_AUDIO]`, `[Music]`, `[Silence]` and other bracketed tags
 - **Expandable toast** — shows full transcription (up to 400px wide, 5 lines), display time scales with text length
 - **Preview mode** — optional confirmation before pasting
 - **Escape to cancel** — discard recording without pasting
-- **Silence detection** — auto-stops after configurable silence timeout
+- **Silence detection** — auto-stops after configurable silence timeout (with countdown warning)
 - **Model switching** — swap Whisper models from the menu bar
 
 ## Configuration
@@ -64,12 +67,20 @@ sound_feedback = true
 max_duration = 300                 # Max recording length (seconds)
 silence_timeout = 10               # Auto-stop after N seconds of silence
 append_mode = true                 # Accumulate text across recordings
+pause_media = true                 # Mute system audio during recording
 
 [postprocessing]
 strip_fillers = true
 auto_capitalize = true
 auto_punctuate = true
 smart_line_breaks = true           # "new line" → \n, "new paragraph" → \n\n
+
+[ai]
+enabled = true                     # AI post-processing via local LLM
+endpoint = "http://127.0.0.1:1234/v1/chat/completions"  # LM Studio
+model = "google/gemma-3-12b"       # Any OpenAI-compatible model
+max_chars = 5000                   # Skip polish for text longer than this
+system_prompt = "Fix only grammar and punctuation errors..."
 ```
 
 ## Project Structure
@@ -87,6 +98,7 @@ smart_line_breaks = true           # "new line" → \n, "new paragraph" → \n\n
       PermissionsCheck.swift       # Accessibility permission onboarding
   service/                         # Python transcription service
     service.py                     # Main orchestrator
+    ai_polish.py                   # AI post-processing via local LLM
     audio.py                       # Audio capture with silence detection
     transcriber.py                 # Whisper wrapper with model management
     postprocess.py                 # Text cleanup pipeline
@@ -104,9 +116,9 @@ smart_line_breaks = true           # "new line" → \n, "new paragraph" → \n\n
 
 **Swift:** HotKey package (soffes/HotKey)
 
-## Planned (Deferred)
+## Requirements
 
-- **AI post-processing** — Claude API polishes grammar/tone in background, updates clipboard with polished version. Spec approved, waiting on API account setup.
+- **LM Studio** — must be running with a model loaded for AI post-processing. If not running, WhisperBox works fine without it (raw text only).
 
 ## Location
 
