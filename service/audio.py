@@ -22,7 +22,9 @@ class AudioRecorder:
         self._silence_frames = 0
         self._frames_per_second = self.SAMPLE_RATE
         self.on_silence_timeout: callable = lambda: None
+        self.on_silence_warning: callable = lambda secs_left: None
         self.on_audio_level: callable = lambda level: None
+        self._last_warning_sec = 99
 
     @property
     def is_recording(self) -> bool:
@@ -32,6 +34,7 @@ class AudioRecorder:
         """Start recording audio from the default input device."""
         self._buffer = []
         self._silence_frames = 0
+        self._last_warning_sec = 99
         self._is_recording = True
         self._stream = sd.InputStream(
             samplerate=self.SAMPLE_RATE,
@@ -74,10 +77,17 @@ class AudioRecorder:
         # Silence detection
         if self._is_silence(mono):
             self._silence_frames += len(mono)
+            silence_secs = self._silence_frames / self.SAMPLE_RATE
+            secs_left = int(self._silence_timeout - silence_secs)
+            # Send countdown warnings during the last 3 seconds
+            if secs_left <= 3 and secs_left >= 0 and secs_left != self._last_warning_sec:
+                self._last_warning_sec = secs_left
+                self.on_silence_warning(secs_left)
             if self._silence_frames >= self._silence_timeout * self.SAMPLE_RATE:
                 self.on_silence_timeout()
         else:
             self._silence_frames = 0
+            self._last_warning_sec = 99  # Reset high so countdown restarts from 3
 
     def _is_silence(self, audio: np.ndarray) -> bool:
         """Check if audio chunk is below the silence threshold."""

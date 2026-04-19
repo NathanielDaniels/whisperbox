@@ -38,6 +38,7 @@ class WhisperBoxService:
             silence_timeout=bc.get("silence_timeout", 10),
         )
         self._recorder.on_silence_timeout = self._on_silence_timeout
+        self._recorder.on_silence_warning = self._on_silence_warning
         self._recorder.on_audio_level = self._on_audio_level
 
         self._transcriber = Transcriber(model_name=tc.get("model", "small"))
@@ -80,6 +81,7 @@ class WhisperBoxService:
     async def _start_recording(self):
         """Begin audio capture."""
         self._state = "recording"
+        self._recording_start_time = time.monotonic()
         self._recorder.start()
         await self._send_event({
             "event": "recording_started",
@@ -91,6 +93,12 @@ class WhisperBoxService:
             self._max_duration, self._on_max_duration
         )
         self._duration_timer.start()
+
+        # Warning timer — fires 30 seconds before max duration
+        warn_at = self._max_duration - 30
+        if warn_at > 0:
+            self._warn_timer = threading.Timer(warn_at, self._on_duration_warning)
+            self._warn_timer.start()
 
     async def _stop_and_transcribe(self):
         """Stop recording, transcribe, and inject text."""
@@ -226,11 +234,27 @@ class WhisperBoxService:
                 self._loop,
             )
 
+    def _on_silence_warning(self, secs_left: int):
+        """Called when silence is approaching the timeout."""
+        if self._state == "recording" and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._send_event({"event": "recording_warning", "reason": "silence", "seconds_left": secs_left}),
+                self._loop,
+            )
+
     def _on_silence_timeout(self):
         """Called when silence exceeds the timeout during recording."""
         if self._state == "recording" and self._loop:
             asyncio.run_coroutine_threadsafe(
                 self._stop_and_transcribe(), self._loop
+            )
+
+    def _on_duration_warning(self):
+        """Called 30 seconds before max duration."""
+        if self._state == "recording" and self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._send_event({"event": "recording_warning", "reason": "max_duration", "seconds_left": 30}),
+                self._loop,
             )
 
     def _on_max_duration(self):
@@ -244,6 +268,9 @@ class WhisperBoxService:
         if self._duration_timer:
             self._duration_timer.cancel()
             self._duration_timer = None
+        if hasattr(self, '_warn_timer') and self._warn_timer:
+            self._warn_timer.cancel()
+            self._warn_timer = None
 
     async def _send_event(self, event: dict):
         """Send event to Swift app via socket."""

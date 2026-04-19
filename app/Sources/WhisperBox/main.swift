@@ -279,6 +279,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let level = event["level"] as? Double ?? 0.0
             toast.updateAudioLevel(level)
 
+        case "recording_warning":
+            let secsLeft = event["seconds_left"] as? Int ?? 0
+            toast.showWarning("\(secsLeft)")
+
         case "recording_stopped":
             isRecording = false
             updateMenuBarIcon(recording: false)

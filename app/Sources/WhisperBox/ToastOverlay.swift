@@ -16,6 +16,7 @@ class ToastOverlay {
         }
 
         toastState.isRecording = true
+        toastState.isWarning = false
         toastState.statusText = "Listening..."
 
         let view = ToastView(state: toastState)
@@ -59,6 +60,7 @@ class ToastOverlay {
 
     func showTranscribed(text: String) {
         toastState.isRecording = false
+        toastState.isWarning = false
         toastState.statusText = text.isEmpty ? "Transcribed!" : text
         resizeToFit()
 
@@ -69,8 +71,20 @@ class ToastOverlay {
         }
     }
 
+    func showWarning(_ message: String) {
+        toastState.isWarning = true
+        toastState.statusText = message
+        resizeToFit()
+    }
+
     func updateAudioLevel(_ level: Double) {
         toastState.audioLevel = level
+        // Reset warning state when user starts speaking again
+        if level > 0.1 && toastState.isWarning {
+            toastState.isWarning = false
+            toastState.statusText = "Listening..."
+            resizeToFit()
+        }
     }
 
     func showError(_ message: String) {
@@ -118,6 +132,7 @@ class ToastOverlay {
 
 class ToastState: ObservableObject {
     @Published var isRecording = false
+    @Published var isWarning = false
     @Published var statusText = "Listening..."
     @Published var audioLevel: Double = 0.0
 }
@@ -126,27 +141,43 @@ struct ToastView: View {
     @ObservedObject var state: ToastState
 
     var body: some View {
-        HStack(spacing: 10) {
-            if state.isRecording {
-                SoundWaveBars(level: state.audioLevel)
+        Group {
+            if state.isWarning {
+                // Big countdown number
+                Text(state.statusText)
+                    .font(.system(size: 48, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.red.opacity(0.9))
+                    )
             } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.system(size: 16))
+                HStack(spacing: 10) {
+                    if state.isRecording {
+                        SoundWaveBars(level: state.audioLevel)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                            .font(.system(size: 16))
+                    }
+                    Text(state.statusText)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(5)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(maxWidth: 400)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.black.opacity(0.85))
+                )
             }
-            Text(state.statusText)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white)
-                .lineLimit(5)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(maxWidth: 400)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(Color.black.opacity(0.85))
-        )
+        .animation(.easeInOut(duration: 0.2), value: state.isWarning)
     }
 }
 
