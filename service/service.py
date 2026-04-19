@@ -49,6 +49,7 @@ class WhisperBoxService:
         self._state = "idle"  # idle, recording, transcribing
         self._max_duration = bc.get("max_duration", 300)
         self._duration_timer: threading.Timer | None = None
+        self._warn_timer: threading.Timer | None = None
         self._append_buffer: list[str] = []
         self._last_transcription_time: float = 0
         self._append_timeout = 30  # seconds before buffer auto-clears
@@ -268,7 +269,7 @@ class WhisperBoxService:
         if self._duration_timer:
             self._duration_timer.cancel()
             self._duration_timer = None
-        if hasattr(self, '_warn_timer') and self._warn_timer:
+        if self._warn_timer:
             self._warn_timer.cancel()
             self._warn_timer = None
 

@@ -34,6 +34,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let maxRestarts = 3
     private var didMuteAudio = false
     private var wasMutedBefore = false
+    private var lastRawTranscription = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Kill any orphaned Python service processes from previous crashes
@@ -300,6 +301,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let text = event["text"] as? String ?? ""
             let preview = event["preview"] as? Bool ?? false
             let fullText = event["full_text"] as? String ?? text
+            lastRawTranscription = text
 
             if preview {
                 previewPanel.show(text: text)
@@ -354,10 +356,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case "ai_polish_complete":
             let polished = event["text"] as? String ?? ""
             if !polished.isEmpty {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(polished, forType: .string)
-                toast.showTranscribed(text: "Polished — ⌘V")
+                // Only overwrite clipboard if it still contains the raw transcription
+                let current = NSPasteboard.general.string(forType: .string) ?? ""
+                if current == lastRawTranscription || current.hasSuffix(lastRawTranscription) {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(polished, forType: .string)
+                    toast.showTranscribed(text: "Polished — ⌘V")
+                }
             }
 
         default:
@@ -433,9 +439,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func stopRecording() {
         socketClient.sendCommand(["cmd": "stop_recording"])
-        isRecording = false
-        updateMenuBarIcon(recording: false)
-        hotkeyManager.setEscapeEnabled(false)
     }
 
     @objc private func toggleRecording() {
